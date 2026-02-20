@@ -6,7 +6,7 @@ project(hailo-ollama)
 include(FetchContent)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 find_package(OpenSSL REQUIRED)
 find_package(HailoRT 5 REQUIRED)
@@ -18,4 +18,8 @@ if(HAILO_BUILD_UT)
     add_subdirectory(test)
     enable_testing()
     add_test(project-tests hailo-ollama-test)
+endif()
+
+if (WIN32)
+  target_compile_definitions(hailo-ollama-lib PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()

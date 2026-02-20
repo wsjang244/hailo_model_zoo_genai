@@ -28,7 +28,12 @@ std::string to_iso_8601(
     // e.g. 2016-08-30T08:18:51
     std::ostringstream stream;
     struct tm buf;
-    stream << std::put_time(gmtime_r(&epoch_seconds, &buf), "%FT%T");
+#ifdef _WIN32
+    gmtime_s(&buf, &epoch_seconds);
+    stream << std::put_time(&buf, "%FT%T"); // Windows: gmtime_s(tm*, time_t*)
+#else
+    stream << std::put_time(gmtime_r(&epoch_seconds, &buf), "%FT%T"); // POSIX: gmtime_r(time_t*, tm*)
+#endif
 
     // If we now convert back to a time_point we will get the time truncated
     // to whole seconds

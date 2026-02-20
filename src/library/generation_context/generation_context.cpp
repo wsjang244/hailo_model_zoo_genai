@@ -122,7 +122,8 @@ void GenerationContext::load_model(
             "Failed to create VDevice"
         );
         auto llm_params = hailort::genai::LLMParams();
-        llm_params.set_model(m_last_path, ""s);
+        llm_params.set_model(m_last_path.string(), ""s);
+        // llm_params.set_model(m_last_path, ""s);
         OATPP_LOGi(
             "GenerationThread",
             "replacing model to {}",

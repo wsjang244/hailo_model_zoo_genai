@@ -268,7 +268,8 @@ std::shared_ptr<oat::OutgoingResponse> MyController::handle_completion(
             message->content = response.str();
 
             auto choice = ChatChoice::createShared();
-            choice->index = 0L;
+            choice->index = static_cast<v_int64>(0L);
+            // choice->index = 0L;
             choice->finish_reason = std::move(stop_reason);
             choice->message = message;
 

@@ -35,7 +35,8 @@ namespace fs = std::filesystem;
 
 std::string
 BlobResourceProvider::get_resource_str(const std::string& resource) {
-    return m_blob_dir / ("sha256_"s + resource);
+    return (m_blob_dir / ("sha256_"s + resource)).string();
+    // return m_blob_dir / ("sha256_"s + resource);
 }
 
 BlobResourceProvider::BlobResourceProvider(
