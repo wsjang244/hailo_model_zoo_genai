@@ -1,22 +1,22 @@
-# hailo_model_zoo_genai Windows Porting Guide
+# hailo_model_zoo_genai Windows移植ガイド
 
-## Overview
+## 概要
 
-[hailo_model_zoo_genai](https://github.com/hailo-ai/hailo_model_zoo_genai) is a Linux-only project, but since HailoRT 5.2.0 supports Windows, it can be built and run on Windows by applying a few source-code modifications.
+[hailo_model_zoo_genai](https://github.com/hailo-ai/hailo_model_zoo_genai) はLinux専用プロジェクトだが、HailoRT 5.2.0がWindowsに対応しているため、ソースコードの修正によりWindows上でのビルド・実行が可能。
 
 ---
 
-## Prerequisites
+## 前提条件
 
-- Windows 10/11 64-bit
-- Visual Studio 2022 Build Tools (MSVC 19.41)
+- Windows 10/11 64bit
+- Visual Studio 2022 Build Tools（MSVC 19.41）
 - CMake 4.2+
-- HailoRT 5.2.0 (installed in `C:\Program Files\HailoRT`)
-- Hailo-10H module (PCIe connection)
+- HailoRT 5.2.0（`C:\Program Files\HailoRT` にインストール済み）
+- Hailo-10H モジュール（PCIe接続）
 
 ---
 
-## 1. Prepare OpenSSL (via vcpkg)
+## 1. OpenSSLの準備（vcpkg経由）
 
 ```powershell
 cd C:\
@@ -25,17 +25,17 @@ cd .\vcpkg
 .\bootstrap-vcpkg.bat
 .\vcpkg.exe install openssl:x64-windows
 
-# Add vcpkg DLLs to PATH (required at runtime for OpenSSL, etc.)
+# vcpkg の DLL にパスを通す（OpenSSL等の実行時に必要）
 $env:PATH += ";C:\vcpkg\installed\x64-windows\bin"
 ```
 
 ---
 
-## 2. Edit the Source Code
+## 2. ソースコードの編集
 
-### 2-1. `CMakeLists.txt` (top-level)
+### 2-1. `CMakeLists.txt`（トップレベル）
 
-Add Windows-specific definitions to the original content:
+元の内容にWindows対応の定義を追加：
 
 ```cmake
 cmake_minimum_required(VERSION 3.20)
@@ -58,52 +58,51 @@ if (WIN32)
 endif()
 ```
 
-### 2-2. `src/library/controller/controller.cpp` (around line 271)
+### 2-2. `src/library/controller/controller.cpp`（271行目付近）
 
-Assigning a `long` to oatpp `Int64` is ambiguous (`long` is 32-bit in MSVC):
+oatpp `Int64` への `long` 代入が曖昧（MSVCでは `long` = 32bit）：
 
 ```cpp
-// Before
-choice->index = 0L;  // long type
-
-// After
+// 変更前
+choice->index = 0L;  // long型
+// 変更後
 choice->index = static_cast<v_int64>(0L);
 ```
 
-### 2-3. `src/library/generation_context/generation_context.cpp` (around line 125)
+### 2-3. `src/library/generation_context/generation_context.cpp`（125行目付近）
 
-MSVC does not allow implicit conversion from `std::filesystem::path` to `const std::string &`:
+`std::filesystem::path` → `const std::string &` の暗黙変換がMSVCで不可：
 
 ```cpp
-// Before
+// 変更前
 llm_params.set_model(m_last_path, ""s);
 
-// After
+// 変更後
 llm_params.set_model(m_last_path.string(), ""s);
 ```
 
-### 2-4. `src/library/model/blob_resource.cpp` (around line 38)
+### 2-4. `src/library/model/blob_resource.cpp`（38行目付近）
 
-Likewise, fix `filesystem::path` → `string` conversion:
+同じく `filesystem::path` → `string` の変換：
 
 ```cpp
-// Before
+// 変更前
 return m_blob_dir / ("sha256_"s + resource);
 
-// After
+// 変更後
 return (m_blob_dir / ("sha256_"s + resource)).string();
 ```
 
-### 2-5. `src/library/utils/time.cpp` (around line 31)
+### 2-5. `src/library/utils/time.cpp`（31行目付近）
 
-`gmtime_r` is a POSIX function and not available on Windows. Replace it with `gmtime_s` (argument order is reversed):
+`gmtime_r` はPOSIX関数でWindows非対応。`gmtime_s` で代替（引数の順序が逆）：
 
 ```cpp
-// Before
+// 変更前
 struct tm result;
 stream << std::put_time(gmtime_r(&epoch_seconds, &buf), "%FT%T"); // POSIX: gmtime_r(time_t*, tm*)
 
-// After
+// 変更後
 struct tm result;
 #ifdef _WIN32
 gmtime_s(&buf, &epoch_seconds);
@@ -115,27 +114,27 @@ stream << std::put_time(gmtime_r(&epoch_seconds, &buf), "%FT%T"); // POSIX: gmti
 
 ### 2-6. `src/apps/server/CMakeLists.txt`
 
-On the side that links `hailo-ollama-lib` (the server executable), add the HailoRT include path by linking HailoRT:
+`hailo-ollama-lib` をリンクする側（サーバーexe）にHailoRTのインクルードパスを通す。
 
 ```cpp
-// Before
+// 変更前
 struct tm result;
 target_link_libraries(hailo-ollama hailo-ollama-lib)
 
-// After
+// 変更後
 target_link_libraries(hailo-ollama hailo-ollama-lib HailoRT::libhailort)
 ```
 
 ---
 
-## 3. Build Steps
+## 3. ビルド手順
 
 ```powershell
 cd C:\Workspace\Windows_demo\hailo_model_zoo_genai
 mkdir build
 cd build
 
-# Generate with CMake
+# CMake生成
 cmake -G "Visual Studio 17 2022" -A x64 `
   -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake `
   -DVCPKG_TARGET_TRIPLET=x64-windows `
@@ -143,27 +142,27 @@ cmake -G "Visual Studio 17 2022" -A x64 `
   -DHAILO_BUILD_UT=OFF `
   ..
 
-# Build
+# ビルド
 cmake --build . --config Release
 ```
 
-Output: `build\src\apps\server\Release\hailo-ollama.exe`
+成果物: `build\src\apps\server\Release\hailo-ollama.exe`
 
 ---
 
-## 4. Place Configuration Files
+## 4. 設定ファイルの配置
 
 ```powershell
-# Config file
+# 設定ファイル
 mkdir "$env:USERPROFILE\.config\hailo-ollama"
 Copy-Item ..\config\hailo-ollama.json "$env:USERPROFILE\.config\hailo-ollama\"
 
-# Model data
+# モデルデータ
 mkdir "$env:USERPROFILE\.local\share\hailo-ollama"
 Copy-Item -Recurse ..\models\* "$env:USERPROFILE\.local\share\hailo-ollama\models\"
 ```
 
-Verify placement:
+配置確認：
 
 ```powershell
 Test-Path "$env:USERPROFILE\.config\hailo-ollama\hailo-ollama.json"   # True
@@ -172,60 +171,61 @@ Test-Path "$env:USERPROFILE\.local\share\hailo-ollama\models\manifests" # True
 
 ---
 
-## 5. Start the Server
+## 5. サーバー起動
 
 ```powershell
-# Add vcpkg DLLs to PATH (required at runtime for OpenSSL, etc.)
+# vcpkg の DLL にパスを通す（OpenSSL等の実行時に必要）
 $env:PATH += ";C:\vcpkg\installed\x64-windows\bin"
 
-# Set HOME (required because path.cpp is based on XDG conventions)
+# HOME環境変数の設定（path.cppがXDG規約ベースのため必須）
 $env:HOME = $env:USERPROFILE
 
-# Start the server
+# サーバー起動
 .\src\apps\server\Release\hailo-ollama.exe
 ```
 
 ---
 
-## 6. Basic Operations (PowerShell)
+## 6. 基本操作（PowerShell）
 
-### List models
+### モデル一覧
 
 ```powershell
 curl.exe --silent http://localhost:8000/hailo/v1/list
 ```
 
-### Alternative using Invoke-RestMethod
+### Invoke-RestMethod での代替
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/hailo/v1/list
 ```
 
-### Download a model (Pull)
+### モデルのダウンロード（Pull）
 
-Invoke-RestMethod is more stable in PowerShell:
+PowerShellではInvoke-RestMethodが安定しています：
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/api/pull -Method Post -ContentType "application/json" -Body '{ "model": "qwen2.5-coder:1.5b", "stream": true }'
 ```
 
-### Chat
+### チャット
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/api/pull -Method Post -ContentType "application/json" -Body '{"model": "qwen2.5-coder:1.5b", "messages": [{"role": "user", "content": "Tell me a joke"}]}'
 ```
 
+
 ---
 
-## 7. Open WebUI (Optional)
+## 7. Open WebUI（オプション）
 
-### Install
+### インストール
 
 ```powershell
 py.exe -m pip install open-webui
 ```
 
-### Run
+### 起動
 
 ```powershell
 $env:OLLAMA_BASE_URL = "http://127.0.0.1:8000"
@@ -233,14 +233,14 @@ $env:DATA_DIR = "$env:USERPROFILE\.open-webui"
 open-webui serve
 ```
 
-Open `http://localhost:8080` in your browser. On first launch, create a local account.
+ブラウザで `http://localhost:8080` にアクセス。初回はローカルアカウントを作成。
 
 ---
 
-## Notes: Rebuild Procedure
+## 補足：再ビルドの手順
 
-| Change | Required action |
+| 変更内容 | 必要な操作 |
 |---|---|
-| Only source files (.cpp/.hpp) changed | Only run `cmake --build . --config Release` |
-| `CMakeLists.txt` changed | Re-generate with CMake → Build (2 steps) |
-| Delete the build folder and start from scratch | Only when dependencies change or things get weird |
+| ソースファイル（.cpp/.hpp）のみ変更 | `cmake --build . --config Release` のみ |
+| CMakeLists.txt を変更 | cmake 再生成 → ビルド（2ステップ） |
+| buildフォルダを消して最初から | 依存ライブラリ変更時やおかしくなった時のみ |
